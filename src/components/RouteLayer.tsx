@@ -67,9 +67,7 @@ export default function RouteLayer({ file }: Props) {
                   style={{ background: file.color }}
                 />
               )}
-              {isStart && (
-                <span className="route-marker__label">{formatKstTime(entry.timestamp)}</span>
-              )}
+              <span className="route-marker__label">{formatKstTime(entry.timestamp)}</span>
             </div>
           </CustomOverlayMap>
         );
