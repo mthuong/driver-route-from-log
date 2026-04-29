@@ -56,6 +56,7 @@ export default function RouteLayer({ file }: Props) {
             position={{ lat: entry.lat, lng: entry.lng }}
             yAnchor={0.5}
             xAnchor={isStart ? 0 : 0.5}
+            zIndex={isStart || isEnd ? 100 : 1}
           >
             <div className="route-marker" style={{ opacity: degraded ? 0.6 : 1 }}>
               {isStart ? (
