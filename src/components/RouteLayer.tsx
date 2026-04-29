@@ -6,7 +6,6 @@ import { formatKstTime } from "../lib/time";
 type Props = { file: LoadedFile };
 
 const LINE_COLOR = "#000";
-const START_COLOR = "#2bb673";
 
 function StartPin({ color }: { color: string }) {
   return (
@@ -64,7 +63,7 @@ export default function RouteLayer({ file }: Props) {
                 style={{ opacity: degraded ? 0.6 : 1 }}
               >
                 {isStart ? (
-                  <StartPin color={START_COLOR} />
+                  <StartPin color={file.color} />
                 ) : (
                   <span
                     className={`route-marker__dot${isEnd ? " route-marker__dot--end" : ""}`}
