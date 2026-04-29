@@ -1,7 +1,13 @@
+import MapView from "./components/MapView";
+import UploadPanel from "./components/UploadPanel";
+import Legend from "./components/Legend";
+
 export default function App() {
   return (
     <div className="app">
-      <h1>Driver Route from Log</h1>
+      <MapView />
+      <UploadPanel />
+      <Legend />
     </div>
   );
 }
