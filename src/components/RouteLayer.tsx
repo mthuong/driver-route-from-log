@@ -60,7 +60,7 @@ export default function RouteLayer({ file }: Props) {
             <div className="route-marker">
               <span
                 className="route-marker__icon"
-                style={{ opacity: degraded ? 0.6 : 1 }}
+                style={{ opacity: degraded && !isStart ? 0.6 : 1 }}
               >
                 {isStart ? (
                   <StartPin color={file.color} />
