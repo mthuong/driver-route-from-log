@@ -58,15 +58,20 @@ export default function RouteLayer({ file }: Props) {
             xAnchor={isStart ? 0 : 0.5}
             zIndex={isStart || isEnd ? 100 : 1}
           >
-            <div className="route-marker" style={{ opacity: degraded ? 0.6 : 1 }}>
-              {isStart ? (
-                <StartPin color={START_COLOR} />
-              ) : (
-                <span
-                  className={`route-marker__dot${isEnd ? " route-marker__dot--end" : ""}`}
-                  style={{ background: file.color }}
-                />
-              )}
+            <div className="route-marker">
+              <span
+                className="route-marker__icon"
+                style={{ opacity: degraded ? 0.6 : 1 }}
+              >
+                {isStart ? (
+                  <StartPin color={START_COLOR} />
+                ) : (
+                  <span
+                    className={`route-marker__dot${isEnd ? " route-marker__dot--end" : ""}`}
+                    style={{ background: file.color }}
+                  />
+                )}
+              </span>
               <span className="route-marker__label">{formatKstTime(entry.timestamp)}</span>
             </div>
           </CustomOverlayMap>
