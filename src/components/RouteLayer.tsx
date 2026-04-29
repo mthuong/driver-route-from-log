@@ -5,6 +5,9 @@ import { formatKstTime } from "../lib/time";
 
 type Props = { file: LoadedFile };
 
+const LINE_COLOR = "#000";
+const START_COLOR = "#2bb673";
+
 export default function RouteLayer({ file }: Props) {
   const segments = buildSegments(file.entries);
 
@@ -18,7 +21,7 @@ export default function RouteLayer({ file }: Props) {
             { lat: seg.to.lat, lng: seg.to.lng },
           ]}
           strokeWeight={3}
-          strokeColor={file.color}
+          strokeColor={LINE_COLOR}
           strokeOpacity={seg.degraded ? 0.4 : 0.9}
           strokeStyle={seg.degraded ? "shortdash" : "solid"}
         />
@@ -26,22 +29,26 @@ export default function RouteLayer({ file }: Props) {
 
       {file.entries.map((entry, i) => {
         const degraded = isLowAccuracy(entry);
+        const isStart = i === 0;
+        const dotColor = isStart ? START_COLOR : file.color;
         return (
           <CustomOverlayMap
             key={`mk-${file.id}-${i}`}
             position={{ lat: entry.lat, lng: entry.lng }}
             yAnchor={0.5}
-            xAnchor={0.5}
+            xAnchor={isStart ? 0 : 0.5}
           >
             <div className="route-marker" style={{ opacity: degraded ? 0.55 : 1 }}>
               <span
                 className="route-marker__dot"
                 style={{
-                  background: degraded ? "transparent" : file.color,
-                  borderColor: file.color,
+                  background: degraded ? "transparent" : dotColor,
+                  borderColor: dotColor,
                 }}
               />
-              <span className="route-marker__label">{formatKstTime(entry.timestamp)}</span>
+              {isStart && (
+                <span className="route-marker__label">{formatKstTime(entry.timestamp)}</span>
+              )}
             </div>
           </CustomOverlayMap>
         );
