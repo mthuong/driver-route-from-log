@@ -1,20 +1,30 @@
 import { describe, expect, it } from "vitest";
-import { colorForUserId, PALETTE } from "./colors";
+import { pickColor, PALETTE } from "./colors";
 
-describe("colorForUserId", () => {
-  it("returns a value from the palette", () => {
-    const c = colorForUserId("404909");
-    expect(PALETTE).toContain(c);
+describe("pickColor", () => {
+  it("returns the first palette color when nothing is used", () => {
+    expect(pickColor([])).toBe(PALETTE[0]);
   });
 
-  it("is deterministic for the same user id", () => {
-    expect(colorForUserId("404909")).toBe(colorForUserId("404909"));
+  it("returns a color not in the used list", () => {
+    const used = [PALETTE[0], PALETTE[1]];
+    const next = pickColor(used);
+    expect(used).not.toContain(next);
+    expect(PALETTE).toContain(next);
   });
 
-  it("tends to assign different colors to different user ids", () => {
-    const ids = ["404909", "404801", "225714"];
-    const colors = ids.map(colorForUserId);
-    // With 3 ids and 8-color palette, expect at least 2 distinct.
-    expect(new Set(colors).size).toBeGreaterThanOrEqual(2);
+  it("cycles through the palette once all colors are taken", () => {
+    const next = pickColor([...PALETTE]);
+    expect(PALETTE).toContain(next);
+  });
+
+  it("never returns the same color back-to-back as files accumulate", () => {
+    const used: string[] = [];
+    for (let i = 0; i < PALETTE.length; i++) {
+      const c = pickColor(used);
+      expect(used).not.toContain(c);
+      used.push(c);
+    }
+    expect(new Set(used).size).toBe(PALETTE.length);
   });
 });

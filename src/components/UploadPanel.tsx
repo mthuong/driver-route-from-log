@@ -1,7 +1,7 @@
 import { useRef, useState } from "react";
 import { v4 as uuid } from "uuid";
 import { parseLog, ParseLogError } from "../lib/parseLog";
-import { colorForUserId } from "../lib/colors";
+import { pickColor } from "../lib/colors";
 import { useRoutesStore } from "../state/routesStore";
 import "./UploadPanel.css";
 
@@ -16,11 +16,12 @@ export default function UploadPanel() {
     try {
       const text = await file.text();
       const { userId, entries } = parseLog(text);
+      const usedColors = useRoutesStore.getState().files.map((f) => f.color);
       addFile({
         id: uuid(),
         fileName: file.name,
         userId,
-        color: colorForUserId(userId),
+        color: pickColor(usedColors),
         entries,
         uploadedAt: Date.now(),
       });

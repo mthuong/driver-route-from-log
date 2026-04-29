@@ -9,10 +9,8 @@ export const PALETTE = [
   "#34495e", // slate
 ] as const;
 
-export function colorForUserId(userId: string): string {
-  let hash = 0;
-  for (let i = 0; i < userId.length; i++) {
-    hash = (hash * 31 + userId.charCodeAt(i)) >>> 0;
-  }
-  return PALETTE[hash % PALETTE.length];
+export function pickColor(usedColors: readonly string[]): string {
+  const available = PALETTE.find((c) => !usedColors.includes(c));
+  if (available) return available;
+  return PALETTE[usedColors.length % PALETTE.length];
 }
