@@ -10,6 +10,7 @@ const START_COLOR = "#2bb673";
 
 export default function RouteLayer({ file }: Props) {
   const segments = buildSegments(file.entries);
+  const lastIdx = file.entries.length - 1;
 
   return (
     <>
@@ -30,6 +31,7 @@ export default function RouteLayer({ file }: Props) {
       {file.entries.map((entry, i) => {
         const degraded = isLowAccuracy(entry);
         const isStart = i === 0;
+        const isEnd = i === lastIdx && lastIdx > 0;
         const dotColor = isStart ? START_COLOR : file.color;
         return (
           <CustomOverlayMap
@@ -38,13 +40,10 @@ export default function RouteLayer({ file }: Props) {
             yAnchor={0.5}
             xAnchor={isStart ? 0 : 0.5}
           >
-            <div className="route-marker" style={{ opacity: degraded ? 0.55 : 1 }}>
+            <div className="route-marker" style={{ opacity: degraded ? 0.6 : 1 }}>
               <span
-                className="route-marker__dot"
-                style={{
-                  background: degraded ? "transparent" : dotColor,
-                  borderColor: dotColor,
-                }}
+                className={`route-marker__dot${isEnd ? " route-marker__dot--end" : ""}`}
+                style={{ background: dotColor }}
               />
               {isStart && (
                 <span className="route-marker__label">{formatKstTime(entry.timestamp)}</span>
