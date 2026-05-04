@@ -28,6 +28,7 @@ function fileFixture(overrides: Partial<LoadedFile> = {}): LoadedFile {
 
 beforeEach(() => {
   useRoutesStore.getState().clear();
+  useRoutesStore.getState().setMapType("osm");
 });
 
 describe("routesStore", () => {
@@ -52,5 +53,22 @@ describe("routesStore", () => {
     useRoutesStore.getState().addFile(fileFixture({ id: "b" }));
     useRoutesStore.getState().clear();
     expect(useRoutesStore.getState().files).toEqual([]);
+  });
+});
+
+describe("routesStore — mapType", () => {
+  it("defaults to 'osm'", () => {
+    expect(useRoutesStore.getState().mapType).toBe("osm");
+  });
+
+  it("setMapType switches to 'kakao'", () => {
+    useRoutesStore.getState().setMapType("kakao");
+    expect(useRoutesStore.getState().mapType).toBe("kakao");
+  });
+
+  it("setMapType switches back to 'osm'", () => {
+    useRoutesStore.getState().setMapType("kakao");
+    useRoutesStore.getState().setMapType("osm");
+    expect(useRoutesStore.getState().mapType).toBe("osm");
   });
 });

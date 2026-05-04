@@ -25,6 +25,8 @@ type RoutesState = {
   addFile: (file: LoadedFile) => void;
   removeFile: (id: string) => void;
   clear: () => void;
+  mapType: "osm" | "kakao";
+  setMapType: (t: "osm" | "kakao") => void;
 };
 
 export const useRoutesStore = create<RoutesState>()(
@@ -35,6 +37,8 @@ export const useRoutesStore = create<RoutesState>()(
       removeFile: (id) =>
         set((state) => ({ files: state.files.filter((f) => f.id !== id) })),
       clear: () => set({ files: [] }),
+      mapType: "osm",
+      setMapType: (t) => set({ mapType: t }),
     }),
     {
       name: "driver-route-from-log:v1",
@@ -59,3 +63,4 @@ export const useRoutesStore = create<RoutesState>()(
     },
   ),
 );
+
