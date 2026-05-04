@@ -14,6 +14,10 @@ export type ParseResult = {
 
 const INFO_LINE_RE = /GgtController#location\s+user_id=(\d+)\s+params=(\{.*\})\s*$/;
 const KST_LINE_RE = /^\d{4}-\d{2}-\d{2}\s+\d{2}:\d{2}:\d{2}\s*$/;
+const EXPLORE_LINE_RE =
+  /^(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}[+\-]\d{2}:\d{2})\t(\{.*\})\s*$/;
+const EXPLORE_TIME_RE = /"time":"([^"]+)"/;
+const EXPLORE_MSG_RE = /"message":"(.*)"\}$/;
 
 export function parseLog(text: string): ParseResult {
   const lines = text.split(/\r?\n/);
@@ -22,6 +26,37 @@ export function parseLog(text: string): ParseResult {
 
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i];
+
+    const exploreM = line.match(EXPLORE_LINE_RE);
+    if (exploreM) {
+      const blob = exploreM[2];
+      const timeM = blob.match(EXPLORE_TIME_RE);
+      const msgM = blob.match(EXPLORE_MSG_RE);
+      if (!timeM || !msgM) continue;
+
+      const infoM = msgM[1].match(INFO_LINE_RE);
+      if (!infoM) continue;
+
+      const timestamp = new Date(timeM[1]);
+      const paramsBlob = infoM[2].replace(/\\u003e/g, ">");
+      const params = parseRubyHash(paramsBlob);
+      if (!params) continue;
+
+      userIds.add(infoM[1]);
+      entries.push({
+        timestamp,
+        lat: Number(params.lat),
+        lng: Number(params.long),
+        gpsAccuracy: Number(params.gps_accuracy),
+        gpsAge: Number(params.gps_age),
+        gpsContext: String(params.gps_context),
+        deviceBattery: Number(params.device_battery),
+        deviceBatteryState: String(params.device_battery_state),
+        deviceLowPower: Boolean(params.device_low_power),
+      });
+      continue;
+    }
+
     const m = line.match(INFO_LINE_RE);
     if (!m) continue;
 
@@ -38,7 +73,6 @@ export function parseLog(text: string): ParseResult {
     if (!params) continue;
 
     userIds.add(userId);
-
     entries.push({
       timestamp,
       lat: Number(params.lat),
