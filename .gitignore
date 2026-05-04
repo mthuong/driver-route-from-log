@@ -34,3 +34,4 @@ vite.config.js
 
 # Claude
 .claude/
+.github/skills
