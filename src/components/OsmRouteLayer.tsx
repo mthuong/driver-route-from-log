@@ -1,4 +1,5 @@
 import L from "leaflet";
+import { useMemo } from "react";
 import { CircleMarker, Marker, Polyline, Tooltip } from "react-leaflet";
 import type { LoadedFile, LogEntry } from "../types";
 import { isLowAccuracy } from "../types";
@@ -36,6 +37,7 @@ function startPinIcon(color: string): L.DivIcon {
 export default function OsmRouteLayer({ file }: Props) {
   const segments = buildSegments(file.entries);
   const lastIdx = file.entries.length - 1;
+  const startIcon = useMemo(() => startPinIcon(file.color), [file.color]);
 
   return (
     <>
@@ -63,7 +65,7 @@ export default function OsmRouteLayer({ file }: Props) {
             <Marker
               key={`mk-${file.id}-${i}`}
               position={[entry.lat, entry.lng]}
-              icon={startPinIcon(file.color)}
+              icon={startIcon}
               zIndexOffset={100}
             >
               <Tooltip permanent direction="right" offset={[12, 0]} opacity={1}>
