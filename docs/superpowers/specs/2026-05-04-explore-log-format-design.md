@@ -35,7 +35,7 @@ No new files. No format selector. Auto-detection is implicit: the parser tries b
 
 1. Add `EXPLORE_LINE_RE` anchored regex that captures the leading ISO timestamp and the JSON blob:
    ```
-   /^(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}[+\-]\d{2}:\d{2})\t(\{.*\})$/
+   /^(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}[+\-]\d{2}:\d{2})\t(\{.*\})\s*$/
    ```
    Group 1 = ISO timestamp, Group 2 = JSON blob.
 
@@ -56,7 +56,7 @@ No new files. No format selector. Auto-detection is implicit: the parser tries b
    - If either regex fails to match, **silently `continue`**.
    - Run `INFO_LINE_RE` against `message`. If no match, `continue`.
    - The `message` string contains **literal `\u003e`** (the 6-character escape sequence, not the `>` character). Decode it before parsing params: `paramsBlob.replace(/\\u003e/g, '>')`, then pass to `parseRubyHash` as usual.
-   - Use the extracted `time` value (`2026-05-04T08:26:05.615+00:00`) as the timestamp — millisecond UTC precision, stable for sort order.
+   - Use the extracted `time` value (`2026-05-04T08:26:05.615+00:00`) as the timestamp via `new Date(timeStr)` — ISO 8601 strings are natively supported by the `Date` constructor. Do **not** reuse `parseKstLine`, which only handles `YYYY-MM-DD HH:MM:SS` and would return `null` for this format.
 
 4. All existing file-level validations (no entries, multiple user IDs, sort) remain unchanged.
 
@@ -71,8 +71,8 @@ Add a `describe("parseLog — Explore format")` block:
 - Rejects an Explore-format file with no matching entries.
 - Rejects an Explore-format file with multiple distinct user IDs.
 - **Required:** A file mixing both formats from the same user produces a unified sorted result (validates that auto-detection works across both paths in one file).
-- Silently skips explore-format lines where `JSON.parse` fails (truncated line).
-- Silently skips explore-format lines where the JSON parses but `message` does not match `GgtController#location`.
+- Silently skips explore-format lines where the blob has no `"time"` or `"message"` regex match (e.g., truncated line).
+- Silently skips explore-format lines where the `"message"` regex matches but the message content does not contain `GgtController#location user_id=… params=…`.
 
 ## Out of Scope
 
