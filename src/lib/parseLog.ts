@@ -38,6 +38,7 @@ export function parseLog(text: string): ParseResult {
       if (!infoM) continue;
 
       const timestamp = new Date(timeM[1]);
+      if (isNaN(timestamp.getTime())) continue;
       const paramsBlob = infoM[2].replace(/\\u003e/g, ">");
       const params = parseRubyHash(paramsBlob);
       if (!params) continue;
