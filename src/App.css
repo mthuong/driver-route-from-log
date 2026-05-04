@@ -3,6 +3,8 @@ html, body, #root { margin: 0; height: 100%; }
 body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
 .app { position: relative; height: 100vh; width: 100vw; overflow: hidden; }
 
+.leaflet-container { isolation: isolate; }
+
 .sdk-error {
   padding: 2rem;
   color: #b00020;
