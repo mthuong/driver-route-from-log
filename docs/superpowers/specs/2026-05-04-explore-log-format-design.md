@@ -50,11 +50,13 @@ No new files. No format selector. Auto-detection is implicit: the parser tries b
    }
    ```
 
-3. In the explore branch:
-   - `JSON.parse` the blob. If it throws or the result has no `message` string, **silently `continue`** (same pattern as the existing `if (!params) continue`).
+3. In the explore branch, use **regex extraction** rather than `JSON.parse` — the actual files contain unescaped double-quotes inside the `message` value, making the outer blob invalid JSON:
+   - Extract timestamp: `blob.match(/"time":"([^"]+)"/)` → group 1.
+   - Extract message: `blob.match(/"message":"(.*)"\}$/)` → group 1.
+   - If either regex fails to match, **silently `continue`**.
    - Run `INFO_LINE_RE` against `message`. If no match, `continue`.
-   - Parse timestamp using **`json.time`** (the UTC field with millisecond precision: `2026-05-04T08:26:05.615+00:00`) rather than the leading tab field, to preserve sub-second precision needed for stable sort order when multiple entries share the same second.
-   - Parse `paramsBlob` with the existing `parseRubyHash`. After `JSON.parse`, `\u003e` is already decoded to `>`, so `parseRubyHash` works unchanged.
+   - The `message` string contains **literal `\u003e`** (the 6-character escape sequence, not the `>` character). Decode it before parsing params: `paramsBlob.replace(/\\u003e/g, '>')`, then pass to `parseRubyHash` as usual.
+   - Use the extracted `time` value (`2026-05-04T08:26:05.615+00:00`) as the timestamp — millisecond UTC precision, stable for sort order.
 
 4. All existing file-level validations (no entries, multiple user IDs, sort) remain unchanged.
 
