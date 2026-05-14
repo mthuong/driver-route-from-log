@@ -59,7 +59,7 @@ export default function UploadPanel() {
       <input
         ref={inputRef}
         type="file"
-        accept=".txt,.log,text/plain"
+        accept=".txt,.log,.json,text/plain,application/json"
         style={{ display: "none" }}
         onChange={(e) => {
           const f = e.target.files?.[0];
@@ -67,7 +67,7 @@ export default function UploadPanel() {
           e.target.value = "";
         }}
       />
-      <p className="upload-panel__hint">or drag a `.txt` log here</p>
+      <p className="upload-panel__hint">or drag a `.txt` / `.json` log here</p>
       {error && <p className="upload-panel__error">{error}</p>}
     </div>
   );
