@@ -20,9 +20,55 @@ const EXPLORE_TIME_RE = /"time":"([^"]+)"/;
 const EXPLORE_MSG_RE = /"message":"(.*)"\}$/;
 
 export function parseLog(text: string): ParseResult {
-  const lines = text.split(/\r?\n/);
   const entries: LogEntry[] = [];
   const userIds = new Set<string>();
+
+  const trimmed = text.trimStart();
+  if (trimmed.startsWith("[")) {
+    let parsed: unknown = null;
+    try {
+      parsed = JSON.parse(trimmed);
+    } catch {
+      parsed = null;
+    }
+    if (Array.isArray(parsed)) {
+      for (const item of parsed) {
+        const fields = (item as { fields?: unknown })?.fields as
+          | { time?: unknown; message?: unknown }
+          | undefined;
+        if (!fields) continue;
+        const timeStr = typeof fields.time === "string" ? fields.time : null;
+        const message =
+          typeof fields.message === "string" ? fields.message : null;
+        if (!timeStr || !message) continue;
+
+        const infoM = message.match(INFO_LINE_RE);
+        if (!infoM) continue;
+
+        const timestamp = new Date(timeStr);
+        if (isNaN(timestamp.getTime())) continue;
+
+        const params = parseRubyHash(infoM[2]);
+        if (!params) continue;
+
+        userIds.add(infoM[1]);
+        entries.push({
+          timestamp,
+          lat: Number(params.lat),
+          lng: Number(params.long),
+          gpsAccuracy: Number(params.gps_accuracy),
+          gpsAge: Number(params.gps_age),
+          gpsContext: String(params.gps_context),
+          deviceBattery: Number(params.device_battery),
+          deviceBatteryState: String(params.device_battery_state),
+          deviceLowPower: Boolean(params.device_low_power),
+        });
+      }
+      return finalize(entries, userIds);
+    }
+  }
+
+  const lines = text.split(/\r?\n/);
 
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i];
@@ -87,6 +133,10 @@ export function parseLog(text: string): ParseResult {
     });
   }
 
+  return finalize(entries, userIds);
+}
+
+function finalize(entries: LogEntry[], userIds: Set<string>): ParseResult {
   if (entries.length === 0) {
     throw new ParseLogError("No GgtController#location entries found");
   }

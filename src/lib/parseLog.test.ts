@@ -148,6 +148,105 @@ describe("parseLog — Explore format", () => {
   });
 });
 
+const jsonArrayLog = JSON.stringify([
+  {
+    line: "raw-stdout-blob-ignored",
+    timestamp: "1778738057565436942",
+    date: "2026-05-14T05:54:17.565Z",
+    fields: {
+      time: "2026-05-14T05:54:17.565+00:00",
+      type: "INFO",
+      message:
+        '[bbb] GgtController#location user_id=241273 params={"lat"=>10.8398, "long"=>106.8396, "gps_accuracy"=>6.27, "gps_age"=>0.04, "gps_context"=>"location_update", "device_battery"=>0.85, "device_battery_state"=>"unplugged", "device_low_power"=>false}',
+    },
+  },
+  {
+    line: "raw-stdout-blob-ignored",
+    timestamp: "1778738056761158876",
+    date: "2026-05-14T05:54:16.761Z",
+    fields: {
+      time: "2026-05-14T05:54:16.760+00:00",
+      type: "INFO",
+      message:
+        '[ccc] GgtController#location user_id=241273 params={"lat"=>10.8399, "long"=>106.8397, "gps_accuracy"=>3.9, "gps_age"=>0.04, "gps_context"=>"location_update", "device_battery"=>0.85, "device_battery_state"=>"unplugged", "device_low_power"=>false}',
+    },
+  },
+]);
+
+describe("parseLog — JSON array format (Loki export)", () => {
+  it("parses user ID and entry count", () => {
+    const result = parseLog(jsonArrayLog);
+    expect(result.userId).toBe("241273");
+    expect(result.entries).toHaveLength(2);
+  });
+
+  it("sorts entries chronologically (input is descending)", () => {
+    const result = parseLog(jsonArrayLog);
+    expect(result.entries[0].timestamp.getTime()).toBeLessThan(
+      result.entries[1].timestamp.getTime(),
+    );
+  });
+
+  it("uses fields.time for millisecond-precision timestamps", () => {
+    const result = parseLog(jsonArrayLog);
+    expect(result.entries[1].timestamp.toISOString()).toBe(
+      "2026-05-14T05:54:17.565Z",
+    );
+  });
+
+  it("extracts coordinates and device fields", () => {
+    const e = parseLog(jsonArrayLog).entries[1];
+    expect(e.lat).toBeCloseTo(10.8398);
+    expect(e.lng).toBeCloseTo(106.8396);
+    expect(e.gpsContext).toBe("location_update");
+    expect(e.deviceBatteryState).toBe("unplugged");
+    expect(e.deviceLowPower).toBe(false);
+  });
+
+  it("rejects a JSON array with no GgtController#location entries", () => {
+    const empty = JSON.stringify([
+      { fields: { time: "2026-05-14T05:54:17.565+00:00", message: "[x] Other#thing user_id=1" } },
+    ]);
+    expect(() => parseLog(empty)).toThrow(ParseLogError);
+  });
+
+  it("rejects a JSON array containing multiple distinct user_ids", () => {
+    const multi = JSON.stringify([
+      {
+        fields: {
+          time: "2026-05-14T05:54:17.565+00:00",
+          message:
+            '[a] GgtController#location user_id=111 params={"lat"=>1.0, "long"=>2.0, "gps_accuracy"=>1, "gps_age"=>0, "gps_context"=>"x", "device_battery"=>1, "device_battery_state"=>"y", "device_low_power"=>false}',
+        },
+      },
+      {
+        fields: {
+          time: "2026-05-14T05:54:18.000+00:00",
+          message:
+            '[b] GgtController#location user_id=222 params={"lat"=>1.0, "long"=>2.0, "gps_accuracy"=>1, "gps_age"=>0, "gps_context"=>"x", "device_battery"=>1, "device_battery_state"=>"y", "device_low_power"=>false}',
+        },
+      },
+    ]);
+    expect(() => parseLog(multi)).toThrow(ParseLogError);
+  });
+
+  it("silently skips entries missing fields.message or fields.time", () => {
+    const mixed = JSON.stringify([
+      { fields: { time: "2026-05-14T05:54:17.565+00:00" } }, // no message
+      { fields: { message: "no time here" } }, // no time
+      {
+        fields: {
+          time: "2026-05-14T05:54:17.565+00:00",
+          message:
+            '[a] GgtController#location user_id=241273 params={"lat"=>1.0, "long"=>2.0, "gps_accuracy"=>1, "gps_age"=>0, "gps_context"=>"x", "device_battery"=>1, "device_battery_state"=>"y", "device_low_power"=>false}',
+        },
+      },
+    ]);
+    const result = parseLog(mixed);
+    expect(result.entries).toHaveLength(1);
+  });
+});
+
 describe("parseLog — mixed format (Explore + Ruby-logger, same user)", () => {
   it("produces a unified sorted result", () => {
     // One Ruby-logger entry: 2026-04-23 16:39:10 KST = 2026-04-23T07:39:10.000Z
