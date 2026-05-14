@@ -1,24 +1,42 @@
 import L from "leaflet";
 import { useMemo } from "react";
-import { CircleMarker, Marker, Polyline, Tooltip } from "react-leaflet";
+import { CircleMarker, Marker, Polyline, Tooltip, useMap } from "react-leaflet";
 import type { LoadedFile, LogEntry } from "../types";
 import { isLowAccuracy } from "../types";
 import { formatKstTime } from "../lib/time";
 
 type Props = { file: LoadedFile };
 
-type Segment = { from: LogEntry; to: LogEntry; degraded: boolean };
+type Run = { degraded: boolean; points: [number, number][] };
 
-function buildSegments(entries: LogEntry[]): Segment[] {
-  const segs: Segment[] = [];
-  for (let i = 1; i < entries.length; i++) {
-    segs.push({
-      from: entries[i - 1],
-      to: entries[i],
-      degraded: isLowAccuracy(entries[i - 1]) || isLowAccuracy(entries[i]),
-    });
+const ARROW_EVERY_N_SEGMENTS = 10;
+
+function buildRuns(entries: LogEntry[]): Run[] {
+  if (entries.length < 2) return [];
+  const runs: Run[] = [];
+  let current: Run | null = null;
+  for (let i = 0; i < entries.length - 1; i++) {
+    const a = entries[i];
+    const b = entries[i + 1];
+    const degraded = isLowAccuracy(a) || isLowAccuracy(b);
+    if (!current || current.degraded !== degraded) {
+      if (current) current.points.push([a.lat, a.lng]);
+      current = { degraded, points: [[a.lat, a.lng]] };
+      runs.push(current);
+    }
+    current.points.push([b.lat, b.lng]);
   }
-  return segs;
+  return runs;
+}
+
+function bearingDeg(a: LogEntry, b: LogEntry): number {
+  const toRad = Math.PI / 180;
+  const φ1 = a.lat * toRad;
+  const φ2 = b.lat * toRad;
+  const Δλ = (b.lng - a.lng) * toRad;
+  const y = Math.sin(Δλ) * Math.cos(φ2);
+  const x = Math.cos(φ1) * Math.sin(φ2) - Math.sin(φ1) * Math.cos(φ2) * Math.cos(Δλ);
+  return (Math.atan2(y, x) * 180) / Math.PI;
 }
 
 function startPinIcon(color: string): L.DivIcon {
@@ -34,59 +52,105 @@ function startPinIcon(color: string): L.DivIcon {
   });
 }
 
+function arrowIcon(rotationDeg: number): L.DivIcon {
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 12 12" width="12" height="12" style="transform: rotate(${rotationDeg}deg); transform-origin: 50% 50%;">
+    <path d="M6 0 L11 11 L6 8 L1 11 Z" fill="#000" stroke="#fff" stroke-width="1" stroke-linejoin="round"/>
+  </svg>`;
+  return L.divIcon({
+    html: svg,
+    className: "route-arrow",
+    iconSize: [12, 12],
+    iconAnchor: [6, 6],
+  });
+}
+
 export default function OsmRouteLayer({ file }: Props) {
-  const segments = buildSegments(file.entries);
-  const lastIdx = file.entries.length - 1;
+  useMap();
+  const canvasRenderer = useMemo(() => L.canvas({ padding: 0.5 }), []);
+  const runs = useMemo(() => buildRuns(file.entries), [file.entries]);
   const startIcon = useMemo(() => startPinIcon(file.color), [file.color]);
+  const lastIdx = file.entries.length - 1;
+
+  const arrows = useMemo(() => {
+    const out: { lat: number; lng: number; angle: number; key: string }[] = [];
+    for (let i = ARROW_EVERY_N_SEGMENTS; i < file.entries.length - 1; i += ARROW_EVERY_N_SEGMENTS) {
+      const a = file.entries[i];
+      const b = file.entries[i + 1];
+      out.push({
+        lat: (a.lat + b.lat) / 2,
+        lng: (a.lng + b.lng) / 2,
+        angle: bearingDeg(a, b),
+        key: `arr-${file.id}-${i}`,
+      });
+    }
+    return out;
+  }, [file.entries, file.id]);
 
   return (
     <>
-      {segments.map((seg, i) => (
+      {runs.map((run, i) => (
         <Polyline
-          key={`seg-${file.id}-${i}`}
-          positions={[
-            [seg.from.lat, seg.from.lng],
-            [seg.to.lat, seg.to.lng],
-          ]}
-          color="#000"
-          weight={3}
-          opacity={seg.degraded ? 0.4 : 0.9}
-          dashArray={seg.degraded ? "6 6" : undefined}
+          key={`run-${file.id}-${i}`}
+          positions={run.points}
+          pathOptions={{
+            color: "#000",
+            weight: 3,
+            opacity: run.degraded ? 0.4 : 0.9,
+            dashArray: run.degraded ? "6 6" : undefined,
+            renderer: canvasRenderer,
+          }}
         />
       ))}
 
+      {arrows.map((a) => (
+        <Marker
+          key={a.key}
+          position={[a.lat, a.lng]}
+          icon={arrowIcon(a.angle)}
+          interactive={false}
+          keyboard={false}
+        />
+      ))}
+
+      <Marker
+        position={[file.entries[0].lat, file.entries[0].lng]}
+        icon={startIcon}
+        zIndexOffset={100}
+      >
+        <Tooltip permanent direction="right" offset={[12, 0]}>
+          <span className="route-marker__label">
+            {formatKstTime(file.entries[0].timestamp)}
+          </span>
+        </Tooltip>
+      </Marker>
+
       {file.entries.map((entry, i) => {
+        if (i === 0) return null;
         const degraded = isLowAccuracy(entry);
-        const isStart = i === 0;
-        const isEnd = i === lastIdx && lastIdx > 0;
-
-        if (isStart) {
-          return (
-            <Marker
-              key={`mk-${file.id}-${i}`}
-              position={[entry.lat, entry.lng]}
-              icon={startIcon}
-              zIndexOffset={100}
-            >
-              <Tooltip permanent direction="right" offset={[12, 0]} opacity={1}>
-                <span className="route-marker__label">{formatKstTime(entry.timestamp)}</span>
-              </Tooltip>
-            </Marker>
-          );
-        }
-
+        const isEnd = i === lastIdx;
+        const permanent = isEnd;
         return (
           <CircleMarker
             key={`mk-${file.id}-${i}`}
             center={[entry.lat, entry.lng]}
             radius={isEnd ? 6 : 4}
-            fillColor={file.color}
-            color="#000"
-            weight={1}
-            fillOpacity={degraded ? 0.4 : 0.9}
+            pathOptions={{
+              fillColor: file.color,
+              color: "#000",
+              weight: 1,
+              fillOpacity: degraded ? 0.4 : 0.9,
+              renderer: canvasRenderer,
+            }}
           >
-            <Tooltip permanent direction="right" offset={[8, 0]} opacity={1}>
-              <span className="route-marker__label">{formatKstTime(entry.timestamp)}</span>
+            <Tooltip
+              permanent={permanent}
+              direction="right"
+              offset={[8, 0]}
+              sticky={!permanent}
+            >
+              <span className="route-marker__label">
+                {formatKstTime(entry.timestamp)}
+              </span>
             </Tooltip>
           </CircleMarker>
         );

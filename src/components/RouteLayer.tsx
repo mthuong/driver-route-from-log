@@ -1,3 +1,4 @@
+import { useMemo } from "react";
 import { CustomOverlayMap, Polyline } from "react-kakao-maps-sdk";
 import type { LoadedFile, LogEntry } from "../types";
 import { isLowAccuracy } from "../types";
@@ -6,6 +7,37 @@ import { formatKstTime } from "../lib/time";
 type Props = { file: LoadedFile };
 
 const LINE_COLOR = "#000";
+const ARROW_EVERY_N_SEGMENTS = 10;
+
+type Run = { degraded: boolean; path: { lat: number; lng: number }[] };
+
+function buildRuns(entries: LogEntry[]): Run[] {
+  if (entries.length < 2) return [];
+  const runs: Run[] = [];
+  let current: Run | null = null;
+  for (let i = 0; i < entries.length - 1; i++) {
+    const a = entries[i];
+    const b = entries[i + 1];
+    const degraded = isLowAccuracy(a) || isLowAccuracy(b);
+    if (!current || current.degraded !== degraded) {
+      if (current) current.path.push({ lat: a.lat, lng: a.lng });
+      current = { degraded, path: [{ lat: a.lat, lng: a.lng }] };
+      runs.push(current);
+    }
+    current.path.push({ lat: b.lat, lng: b.lng });
+  }
+  return runs;
+}
+
+function bearingDeg(a: LogEntry, b: LogEntry): number {
+  const toRad = Math.PI / 180;
+  const φ1 = a.lat * toRad;
+  const φ2 = b.lat * toRad;
+  const Δλ = (b.lng - a.lng) * toRad;
+  const y = Math.sin(Δλ) * Math.cos(φ2);
+  const x = Math.cos(φ1) * Math.sin(φ2) - Math.sin(φ1) * Math.cos(φ2) * Math.cos(Δλ);
+  return (Math.atan2(y, x) * 180) / Math.PI;
+}
 
 function StartPin({ color }: { color: string }) {
   return (
@@ -25,30 +57,76 @@ function StartPin({ color }: { color: string }) {
   );
 }
 
+function Arrow({ angle }: { angle: number }) {
+  return (
+    <svg
+      className="route-arrow"
+      viewBox="0 0 12 12"
+      width="12"
+      height="12"
+      style={{ transform: `rotate(${angle}deg)` }}
+      aria-hidden="true"
+    >
+      <path
+        d="M6 0 L11 11 L6 8 L1 11 Z"
+        fill="#000"
+        stroke="#fff"
+        strokeWidth="1"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
+}
+
 export default function RouteLayer({ file }: Props) {
-  const segments = buildSegments(file.entries);
+  const runs = useMemo(() => buildRuns(file.entries), [file.entries]);
   const lastIdx = file.entries.length - 1;
+
+  const arrows = useMemo(() => {
+    const out: { lat: number; lng: number; angle: number; key: string }[] = [];
+    for (let i = ARROW_EVERY_N_SEGMENTS; i < file.entries.length - 1; i += ARROW_EVERY_N_SEGMENTS) {
+      const a = file.entries[i];
+      const b = file.entries[i + 1];
+      out.push({
+        lat: (a.lat + b.lat) / 2,
+        lng: (a.lng + b.lng) / 2,
+        angle: bearingDeg(a, b),
+        key: `arr-${file.id}-${i}`,
+      });
+    }
+    return out;
+  }, [file.entries, file.id]);
 
   return (
     <>
-      {segments.map((seg, i) => (
+      {runs.map((run, i) => (
         <Polyline
-          key={`seg-${file.id}-${i}`}
-          path={[
-            { lat: seg.from.lat, lng: seg.from.lng },
-            { lat: seg.to.lat, lng: seg.to.lng },
-          ]}
+          key={`run-${file.id}-${i}`}
+          path={run.path}
           strokeWeight={3}
           strokeColor={LINE_COLOR}
-          strokeOpacity={seg.degraded ? 0.4 : 0.9}
-          strokeStyle={seg.degraded ? "shortdash" : "solid"}
+          strokeOpacity={run.degraded ? 0.4 : 0.9}
+          strokeStyle={run.degraded ? "shortdash" : "solid"}
         />
+      ))}
+
+      {arrows.map((a) => (
+        <CustomOverlayMap
+          key={a.key}
+          position={{ lat: a.lat, lng: a.lng }}
+          xAnchor={0.5}
+          yAnchor={0.5}
+          zIndex={2}
+        >
+          <Arrow angle={a.angle} />
+        </CustomOverlayMap>
       ))}
 
       {file.entries.map((entry, i) => {
         const degraded = isLowAccuracy(entry);
         const isStart = i === 0;
         const isEnd = i === lastIdx && lastIdx > 0;
+        const showLabelAlways = isStart || isEnd;
         return (
           <CustomOverlayMap
             key={`mk-${file.id}-${i}`}
@@ -57,7 +135,7 @@ export default function RouteLayer({ file }: Props) {
             xAnchor={isStart ? 0 : 0.5}
             zIndex={isStart || isEnd ? 100 : 1}
           >
-            <div className="route-marker">
+            <div className={`route-marker${showLabelAlways ? "" : " route-marker--hover"}`}>
               <span
                 className="route-marker__icon"
                 style={{ opacity: degraded && !isStart ? 0.6 : 1 }}
@@ -78,20 +156,4 @@ export default function RouteLayer({ file }: Props) {
       })}
     </>
   );
-}
-
-type Segment = { from: LogEntry; to: LogEntry; degraded: boolean };
-
-function buildSegments(entries: LogEntry[]): Segment[] {
-  const segs: Segment[] = [];
-  for (let i = 1; i < entries.length; i++) {
-    const a = entries[i - 1];
-    const b = entries[i];
-    segs.push({
-      from: a,
-      to: b,
-      degraded: isLowAccuracy(a) || isLowAccuracy(b),
-    });
-  }
-  return segs;
 }
