@@ -18,12 +18,62 @@ const EXPLORE_LINE_RE =
   /^(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}[+\-]\d{2}:\d{2})\t(\{.*\})\s*$/;
 const EXPLORE_TIME_RE = /"time":"([^"]+)"/;
 const EXPLORE_MSG_RE = /"message":"(.*)"\}$/;
+const LOKI_TEXT_LINE_RE =
+  /^(\d+)\t(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?Z)\t(.+)$/;
 
 export function parseLog(text: string): ParseResult {
   const entries: LogEntry[] = [];
   const userIds = new Set<string>();
 
   const trimmed = text.trimStart();
+  if (trimmed.startsWith("{")) {
+    let parsed: unknown = null;
+    try {
+      parsed = JSON.parse(trimmed);
+    } catch {
+      parsed = null;
+    }
+    const locations =
+      parsed && typeof parsed === "object"
+        ? ((parsed as { data?: { locations?: unknown } }).data?.locations as
+            | unknown
+            | undefined)
+        : undefined;
+    if (Array.isArray(locations)) {
+      for (const loc of locations as unknown[]) {
+        const l = loc as {
+          driverUserId?: unknown;
+          lat?: unknown;
+          lon?: unknown;
+          createdTime?: unknown;
+        };
+        if (
+          typeof l.driverUserId !== "number" ||
+          typeof l.lat !== "number" ||
+          typeof l.lon !== "number" ||
+          typeof l.createdTime !== "string"
+        ) {
+          continue;
+        }
+        const timestamp = parseKstLine(l.createdTime.trim());
+        if (!timestamp) continue;
+
+        userIds.add(String(l.driverUserId));
+        entries.push({
+          timestamp,
+          lat: l.lat,
+          lng: l.lon,
+          gpsAccuracy: 0,
+          gpsAge: 0,
+          gpsContext: "location_history",
+          deviceBattery: 0,
+          deviceBatteryState: "unknown",
+          deviceLowPower: false,
+        });
+      }
+      return finalize(entries, userIds);
+    }
+  }
   if (trimmed.startsWith("[")) {
     let parsed: unknown = null;
     try {
@@ -72,6 +122,33 @@ export function parseLog(text: string): ParseResult {
 
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i];
+
+    const lokiTextM = line.match(LOKI_TEXT_LINE_RE);
+    if (lokiTextM) {
+      const message = lokiTextM[3];
+      const infoM = message.match(INFO_LINE_RE);
+      if (!infoM) continue;
+
+      const timestamp = new Date(lokiTextM[2]);
+      if (isNaN(timestamp.getTime())) continue;
+
+      const params = parseRubyHash(infoM[2]);
+      if (!params) continue;
+
+      userIds.add(infoM[1]);
+      entries.push({
+        timestamp,
+        lat: Number(params.lat),
+        lng: Number(params.long),
+        gpsAccuracy: Number(params.gps_accuracy),
+        gpsAge: Number(params.gps_age),
+        gpsContext: String(params.gps_context),
+        deviceBattery: Number(params.device_battery),
+        deviceBatteryState: String(params.device_battery_state),
+        deviceLowPower: Boolean(params.device_low_power),
+      });
+      continue;
+    }
 
     const exploreM = line.match(EXPLORE_LINE_RE);
     if (exploreM) {

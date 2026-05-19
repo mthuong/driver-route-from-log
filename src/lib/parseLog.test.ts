@@ -247,6 +247,114 @@ describe("parseLog — JSON array format (Loki export)", () => {
   });
 });
 
+const lokiTextLog = [
+  `: "298 lines displayed"`,
+  `Total bytes processed: "2.27  GB"`,
+  `Common labels: {"app":"argo-ggx-kr-da-api"}`,
+  ``,
+  `1779097253417\t2026-05-18T09:40:53.417Z\tI, [2026-05-18T09:40:53.416752 #53]  INFO -- : [9b6b8b90] GgtController#location user_id=405695 params={"lat"=>37.49484796218378, "long"=>127.14348396247122, "gps_accuracy"=>12.55, "gps_age"=>0.05, "gps_context"=>"location_update", "gps_low_accuracy"=>false, "gps_source"=>"continuous", "gps_stale"=>false, "device_battery"=>0.7, "device_battery_state"=>"unplugged", "device_low_power"=>false}`,
+  `1779097252941\t2026-05-18T09:40:52.941Z\tI, [2026-05-18T09:40:52.941458 #70]  INFO -- request: POST http://example/api/order/notification?action=COMPLETE&driverId=405695&id=2708987`,
+  `1779097250000\t2026-05-18T09:40:50.000Z\tI, [2026-05-18T09:40:50.000000 #53]  INFO -- : [abc] GgtController#location user_id=405695 params={"lat"=>37.5, "long"=>127.1, "gps_accuracy"=>5, "gps_age"=>0.1, "gps_context"=>"location_update", "device_battery"=>0.6, "device_battery_state"=>"unplugged", "device_low_power"=>false}`,
+].join("\n");
+
+describe("parseLog — Loki text export format", () => {
+  it("ignores the header preamble and parses GgtController#location lines", () => {
+    const result = parseLog(lokiTextLog);
+    expect(result.userId).toBe("405695");
+    expect(result.entries).toHaveLength(2);
+  });
+
+  it("uses the line's ISO timestamp at millisecond precision", () => {
+    const result = parseLog(lokiTextLog);
+    // Sorted ascending: 09:40:50 first, then 09:40:53.417
+    expect(result.entries[0].timestamp.toISOString()).toBe("2026-05-18T09:40:50.000Z");
+    expect(result.entries[1].timestamp.toISOString()).toBe("2026-05-18T09:40:53.417Z");
+  });
+
+  it("skips non-GgtController lines (e.g. request logs)", () => {
+    const result = parseLog(lokiTextLog);
+    // Three data rows exist but only two are GgtController#location
+    expect(result.entries).toHaveLength(2);
+  });
+
+  it("extracts coordinates and GPS fields from the Ruby hash", () => {
+    const e = parseLog(lokiTextLog).entries[1];
+    expect(e.lat).toBeCloseTo(37.49484796218378);
+    expect(e.lng).toBeCloseTo(127.14348396247122);
+    expect(e.gpsAccuracy).toBeCloseTo(12.55);
+    expect(e.gpsAge).toBeCloseTo(0.05);
+    expect(e.gpsContext).toBe("location_update");
+  });
+});
+
+const driverLocationHistoryJson = JSON.stringify({
+  success: true,
+  data: {
+    locations: [
+      {
+        driverUserId: 405695,
+        lat: 37.49484,
+        lon: 127.14348,
+        createdTime: "2026-05-18 18:40:53",
+        updatedTime: "2026-05-18 18:40:53",
+      },
+      {
+        driverUserId: 405695,
+        lat: 37.50257,
+        lon: 127.09736,
+        createdTime: "2026-05-18 18:04:15",
+        updatedTime: "2026-05-18 18:04:15",
+      },
+    ],
+  },
+});
+
+describe("parseLog — driver location history JSON", () => {
+  it("parses user ID from driverUserId and entry count", () => {
+    const result = parseLog(driverLocationHistoryJson);
+    expect(result.userId).toBe("405695");
+    expect(result.entries).toHaveLength(2);
+  });
+
+  it("treats createdTime as KST (UTC+9)", () => {
+    const result = parseLog(driverLocationHistoryJson);
+    // 2026-05-18 18:04:15 KST = 2026-05-18T09:04:15Z (earlier, so index 0)
+    expect(result.entries[0].timestamp.toISOString()).toBe("2026-05-18T09:04:15.000Z");
+    expect(result.entries[1].timestamp.toISOString()).toBe("2026-05-18T09:40:53.000Z");
+  });
+
+  it("maps lon → lng and preserves coordinates", () => {
+    const e = parseLog(driverLocationHistoryJson).entries[1];
+    expect(e.lat).toBeCloseTo(37.49484);
+    expect(e.lng).toBeCloseTo(127.14348);
+  });
+
+  it("uses safe defaults for missing GPS/device fields", () => {
+    const e = parseLog(driverLocationHistoryJson).entries[0];
+    expect(e.gpsAccuracy).toBe(0);
+    expect(e.gpsAge).toBe(0);
+    expect(e.deviceLowPower).toBe(false);
+  });
+
+  it("rejects an empty locations array", () => {
+    const empty = JSON.stringify({ success: true, data: { locations: [] } });
+    expect(() => parseLog(empty)).toThrow(ParseLogError);
+  });
+
+  it("rejects multiple distinct driverUserIds", () => {
+    const multi = JSON.stringify({
+      success: true,
+      data: {
+        locations: [
+          { driverUserId: 111, lat: 1, lon: 2, createdTime: "2026-05-18 18:00:00", updatedTime: "2026-05-18 18:00:00" },
+          { driverUserId: 222, lat: 1, lon: 2, createdTime: "2026-05-18 18:00:01", updatedTime: "2026-05-18 18:00:01" },
+        ],
+      },
+    });
+    expect(() => parseLog(multi)).toThrow(ParseLogError);
+  });
+});
+
 describe("parseLog — mixed format (Explore + Ruby-logger, same user)", () => {
   it("produces a unified sorted result", () => {
     // One Ruby-logger entry: 2026-04-23 16:39:10 KST = 2026-04-23T07:39:10.000Z
